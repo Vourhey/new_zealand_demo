@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Standart, System and Third party
+from collections import namedtuple
+
+# ROS
+import rospy
+from std_msgs.msg import String
+from std_srvs.srv import Empty
+
+# AIRA
+from robonomics_msgs.msg import Result
+from robonomics_liability.msg import Liability
+from robonomics_liability.srv import StartLiability, StartLiabilityRequest
+from robonomics_liability.srv import FinishLiability, FinishLiabilityRequest
+
+
+class WorkerNode:
+    def __init__(self):
+        rospy.init_node('worker')
+        rospy.loginfo('Launching worker node...')
+
+        rospy.Subscriber('/liability/incoming', Liability, self.on_new_liability)
+
+        rospy.wait_for_service('liability/finish')
+
+        self.liability_proxy = namedtuple('liability_srvs_proxy', ['start', 'finish'])(
+                                          rospy.ServiceProxy('liability/start', StartLiability),
+                                          rospy.ServiceProxy('liability/finish', FinishLiability))
+
+        self.signing_result = rospy.Publisher('/liability/infochan/eth/signing/result', Result, queue_size=128)
+
+        rospy.loginfo('Worker node launched.')
+
+    def on_new_liability(self, msg):
+        rospy.loginfo("Got new liability %s", msg.address)
+        self.subscribe_and_start(msg)
+
+    def subscribe_and_start(self, liability):
+        rospy.loginfo('Starting process...')
+        rospy.sleep(20)
+
+        # self.liability_proxy.start(liability.address.address)
+
+        res = Result()
+        res.liability = liability.address
+        res.result = liability.objective
+        res.success = True
+
+        self.signing_result.publish(res)
+
+        rospy.loginfo("Finishing")
+        rospy.sleep(20)
+
+        # self.liability_proxy.finish(liability.address.address, True)
+
+    def spin(self):
+        rospy.spin()
+
+if __name__ == '__main__':
+    WorkerNode().spin()
